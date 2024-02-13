@@ -1,7 +1,7 @@
 import tensorflow as tf
 import keras
 import pong
-from keras import Sequential
+from keras.models import Sequential
 import numpy as np
 from typing import Callable
 import random
@@ -52,7 +52,7 @@ def play_one_step(
         loss = tf.reduce_mean(loss_fn(y_target, probabilities))
     grads = tape.gradient(loss, model.trainable_variables)
     obs, reward, done = game.pong_step(action)
-    return obs, reward, done, grads
+    return obs, reward, done, action
 
 
 def play_multible_episodes(
@@ -69,41 +69,56 @@ def play_multible_episodes(
     winkel = int(5 + (progress) / 10 * 40)
     for episode in range(n_episodes):
         current_rewards = []
-        current_grads = []
+        # current_grads = []
         obs = game.reset(winkel=winkel)
+        current_obs = []
+        next_obs = []
+        current_actions = []
         while True:
-            obs, reward, done, grads = play_one_step(
+            current_obs.append(obs)
+            obs, reward, done, action = play_one_step(
                 game,
                 obs,
                 model,
                 loss_fn,
                 zufaelligkeit,
             )
+            next_obs.append(obs)
+            current_actions.append(action)
             current_rewards.append(reward)
-            current_grads.append(grads)
+            # current_grads.append(grads)
             if done:
                 break
         all_rewards.append(current_rewards)
-        all_grads.append(current_grads)
+        # all_grads.append(current_grads)
 
-        all_final_rewards = discount_rewards(current_rewards, discount_factor)
-        all_mean_grads = []
-        for var_index in range(len(model.trainable_variables)):
-            mean_grads = tf.reduce_mean(
-                [
-                    final_reward * current_grads[step][var_index]
-                    for step, final_reward in enumerate(all_final_rewards)
-                ],
-                axis=0,
-            )
-            all_mean_grads.append(mean_grads)
-        optimizer.apply_gradients(zip(all_mean_grads, model.trainable_variables))
+        # all_final_rewards = discount_rewards(current_rewards, discount_factor)
+        # all_mean_grads = []
+        # for var_index in range(len(model.trainable_variables)):
+        #     mean_grads = tf.reduce_mean(
+        #         [
+        #             final_reward * current_grads[step][var_index]
+        #             for step, final_reward in enumerate(all_final_rewards)
+        #         ],
+        #         axis=0,
+        #     )
+        #     all_mean_grads.append(mean_grads)
+        targets = reward + discount_factor * (
+            np.amax(model(np.reshape(next_obs, (1, 5))))
+        )
+        indexes = np.array([i for i in range(len(targets))])
+        target_vector = model(np.reshape(obs, (1, 5)))
+        actions = np.array(current_actions)
+        target_vector[[indexes], [actions]] = targets
+        model.fit(obs, target_vector, epochs=1, verbose=0)
+
+        # optimizer.apply_gradients(zip(all_mean_grads, model.trainable_variables))
         print(
             game.ball_y,
             game.schlaeger_y,
             zufaelligkeit,
             reward,
-            sum(all_final_rewards),
+            # sum(all_final_rewards),
             progress,
         )
         history.append(
@@ -112,7 +127,7 @@ def play_multible_episodes(
                 game.schlaeger_y,
                 zufaelligkeit,
                 reward,
-                sum(all_final_rewards),
+                # sum(all_final_rewards),
             )
         )
     return all_rewards, all_grads
