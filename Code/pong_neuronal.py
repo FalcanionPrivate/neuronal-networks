@@ -28,9 +28,14 @@ n_episodes_per_update = 50
 n_max_steps = 200
 discount_factor = 0.95
 optimizer = keras.optimizers.Adam()
-loss_fn = keras.losses.binary_crossentropy
+loss_fn = keras.losses.CategoricalCrossentropy(from_logits=True)
 history = []
 progress = 10
+
+model.compile(
+    optimizer=optimizer,
+    loss=loss_fn,
+)
 
 
 def play_one_step(
@@ -103,14 +108,16 @@ def play_multible_episodes(
         #         axis=0,
         #     )
         #     all_mean_grads.append(mean_grads)
+
         targets = reward + discount_factor * (
-            np.amax(model(np.reshape(next_obs, (1, 5))))
+            np.amax(model.predict(np.array(next_obs)))
         )
-        indexes = np.array([i for i in range(len(targets))])
-        target_vector = model(np.reshape(obs, (1, 5)))
+
+        target_vector = model.predict(np.array(current_obs))
+        indexes = np.array([i for i in range(target_vector.shape[0])])
         actions = np.array(current_actions)
         target_vector[[indexes], [actions]] = targets
-        model.fit(obs, target_vector, epochs=1, verbose=0)
+        model.fit(np.array(current_obs), target_vector, epochs=1, verbose=0)
 
         # optimizer.apply_gradients(zip(all_mean_grads, model.trainable_variables))
         print(
@@ -155,7 +162,7 @@ def discount_and_normalize_rewards(all_rewards: list, discount_factor: float):
 
 
 if __name__ == "__main__":
-    game = pong.Game(mit_grafik=False)
+    game = pong.Game(mit_grafik=True)
     for rounds in range(progress):
         for interation in range(n_iterrations):
             zufaelligkeit = 0.5 * (n_iterrations - interation) / n_iterrations
