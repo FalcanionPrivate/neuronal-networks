@@ -1,0 +1,42 @@
+# created by chat gpt on 15.1.2024 modified by Benjamin von Metzen
+
+import pandas as pd
+import random
+
+pd.set_option("display.max_rows", 100)
+pd.set_option("display.max_columns", 100)
+pd.set_option("display.width", None)
+pd.set_option("display.max_colwidth", 100)
+
+
+# Define the number of teams and the structure of the league
+num_teams = 12
+teams = [f"Team {i+1}" for i in range(num_teams)]
+
+# Create a schedule where each team plays against every other team
+matches = []
+for i in range(num_teams):
+    for j in range(i + 1, num_teams):
+        matches.append((teams[i], teams[j]))
+
+# Simulate the scores for each match
+results = []
+for match in matches:
+    score_1 = random.randint(0, 5)  # Random score for team 1
+    score_2 = random.randint(0, 5)  # Random score for team 2
+    if score_1 > score_2:
+        winner = "1"
+    else:
+        winner = "2"
+    results.append((match[0], match[1], score_1, score_2, winner))
+
+# Create a DataFrame to display the results
+df = pd.DataFrame(
+    results,
+    columns=["Team 1", "Team 2", "Goals by Team 1", "Goals by Team 2", "Winner"],
+)
+df.to_excel(
+    excel_writer=r"C:\Users\benja\Documents\neuronal networks\Data\fake_generated_data.xlsx",
+    index=False,
+)
+df.head(132)  # Display the first 132 matches

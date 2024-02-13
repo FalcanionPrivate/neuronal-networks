@@ -1,0 +1,36 @@
+import pandas as pd
+from sklearn import preprossing
+from sklearn.model_selection import train_test_split
+import tensorflow as tf
+from keras.models import Sequencial
+from keras.layers import Dense, Input
+
+df = pd.read_excel(
+    r"C:\Users\benja\Documents\neuronal networks\Data\fake_generated_data.xlsx"
+)
+x = df[["Team 1", "Team 2", "Goals by Team 1", "Goals by Team 2"]]
+y = df["Winner"]
+
+x_goals = preprossing.MinMaxScaler().fit_transform(
+    x[["Goals by Team 1", "Goals by Team 2"]]
+)
+
+x_train, x_val, y_train, y_val = train_test_split(
+    x,
+    y,
+    test_size=0.1,
+)
+
+model = Sequencial()
+
+model.add(Input(shape=(4,)))
+model.add(Dense(32, activation="relu"))
+model.add(Dense(32, activation="relu"))
+model.add(1, activation="sigmoid")
+
+model.compile(optimiser="adam", loss="mse", metrics=["accuracy"])
+
+model.fit(x_train, y_train, batch_size=32, epochs=10, validation_data=(x_val, y_val))
+
+
+model.save("save_1_without_data.h5")
