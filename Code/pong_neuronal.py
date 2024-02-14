@@ -125,6 +125,9 @@ def play_one_step(
     return obs, reward, done, action
 
 
+replay_buffer = deque(maxlen=200)
+
+
 def play_multible_episodes(
     game: pong.Game,
     n_episodes: int,
@@ -161,17 +164,24 @@ def play_multible_episodes(
             if done:
                 break
         indices = np.random.randint(len(current_obs), size=batch_size)
+        batch_next_obs = next_obs[indices]
+        batch_current_obs = current_obs[indices]
+        batch_rewards = current_rewards[indices]
+        batch_actions = current_actions[indexes]
+        for index in indices:
+            replay_buffer.append()
 
         with torch.no_grad():
-            targets = np.sum(current_rewards) / 1000 + discount_factor * (
+            target_Q_values = batch_rewards / 1000 + discount_factor * (
                 np.amax(
                     model(
-                        torch.from_numpy(np.array(next_obs, dtype=np.float32)).to(
+                        torch.from_numpy(np.array(batch_next_obs, dtype=np.float32)).to(
                             device=device,
                         )
                     )
                     .to(torch.device("cpu"))
-                    .numpy()
+                    .numpy(),
+                    axis=1,
                 )
             )
 
@@ -189,7 +199,7 @@ def play_multible_episodes(
         model.train()
         indexes = np.array([i for i in range(target_vector.shape[0])])
         actions = np.array(current_actions)
-        target_vector[[indexes], [actions]] = targets
+        target_vector[[indexes], [actions]] = target_Q_values
         loss = train_one_epoch(
             model=model,
             inputs=torch.from_numpy(np.array(current_obs, dtype=np.float32)).to(
