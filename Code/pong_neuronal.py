@@ -1,61 +1,126 @@
-import tensorflow as tf
-import keras
 import pong
-from keras.models import Sequential
+
 import numpy as np
 from typing import Callable
 import random
 import pandas as pd
+from math import tan
+import torch
+from torch import nn
+from collections import deque
 
 n_inputs = 5  # == env.observation_space.shape[0]
 
-model = Sequential(
-    [
-        keras.layers.Dense(20, activation="sigmoid", input_shape=[n_inputs]),
-        keras.layers.Dense(20, activation="relu"),
-        keras.layers.Dense(20, activation="relu"),
-        # keras.layers.Dense(10, activation="relu"),
-        # evtl mehr versteckte Schichten
-        keras.layers.Dense(
-            3,
-            activation="linear",  # bei mehr als einem Output Softmax-Aktivierungsfunktion
-        ),
-    ]
+device = (
+    "cuda"
+    if torch.cuda.is_available()
+    else "mps" if torch.backends.mps.is_available() else "cpu"
 )
+print(f"Using {device} device")
+
+
+# model = Sequential(
+#     [
+#         keras.layers.Dense(30, activation="sigmoid", input_shape=[n_inputs]),
+#         keras.layers.Dense(30, activation="relu"),
+#         keras.layers.Dense(30, activation="relu"),
+#         # keras.layers.Dense(10, activation="relu"),
+#         # evtl mehr versteckte Schichten
+#         keras.layers.Dense(
+#             3,
+#             activation="softmax",  # bei mehr als einem Output Softmax-Aktivierungsfunktion
+#         ),
+#     ]
+# )
+
+
+class NeuralNetwork(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.linear_relu_stack = nn.Sequential(
+            nn.Linear(n_inputs, 512),
+            nn.Sigmoid(),
+            nn.Linear(512, 512),
+            nn.Tanh(),
+            nn.Linear(512, 256),
+            nn.Softmax(),
+            nn.Linear(256, 128),
+            nn.Softmax(),
+            nn.Linear(128, 3),
+        )
+
+    def forward(self, x):
+        logits = self.linear_relu_stack(x)
+        return logits
+
+
+model = NeuralNetwork().to(device)
 
 n_iterrations = 150
-n_episodes_per_update = 50
+n_episodes_per_update = 100
 n_max_steps = 200
-discount_factor = 0.95
-optimizer = keras.optimizers.Adam()
-loss_fn = keras.losses.CategoricalCrossentropy(from_logits=True)
+discount_factor = 0.99
+# optimizer = keras.optimizers.Adam()
+optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+# loss_fn = keras.losses.CategoricalCrossentropy(from_logits=True)
+loss_fn = torch.nn.HuberLoss()
+batch_size = 32
+
+
 history = []
 progress = 10
 
-model.compile(
-    optimizer=optimizer,
-    loss=loss_fn,
-)
+# model.compile(
+#     optimizer=optimizer,
+#     loss=loss_fn,
+# )
+
+
+def train_one_epoch(
+    model: NeuralNetwork,
+    inputs: torch.Tensor,
+    labels: torch.Tensor,
+    loss_fn: torch.nn.HuberLoss,
+):
+
+    # Zero your gradients for every batch!
+    optimizer.zero_grad()
+
+    # Make predictions for this batch
+    outputs = model(inputs)
+
+    # Compute the loss and its gradients
+    loss = loss_fn(outputs, labels)
+    loss.backward()
+
+    # Adjust learning weights
+    optimizer.step()
+
+    # Gather data and report
+    return loss.item()
 
 
 def play_one_step(
     game: pong.Game,
     obs: np.ndarray,
-    model: keras.Model,
+    model: NeuralNetwork,
     loss_fn: Callable,
     zufaelligkeit: float,
 ):
-    with tf.GradientTape() as tape:
-        probabilities = model(np.reshape(obs, (1, 5)))
-        if random.random() > zufaelligkeit:
-            action = np.argmax(probabilities.numpy()[0], axis=0)
-        else:
-            action = random.randint(0, 2)
-        y_target = tf.cast(
-            np.array([1 if i == action else 0 for i in range(3)], ndmin=2), tf.float32
+
+    if random.random() > zufaelligkeit:
+        probabilities: torch.Tensor = model(
+            torch.from_numpy(np.reshape(obs.astype(np.float32), (1, 5))).to(
+                device=device
+            )
         )
-        loss = tf.reduce_mean(loss_fn(y_target, probabilities))
-    grads = tape.gradient(loss, model.trainable_variables)
+        with torch.no_grad():
+            np_probs = probabilities.to(torch.device("cpu")).numpy()[0]
+            # print(np_probs)
+            action = np.argmax(np_probs, axis=0)
+    else:
+        action = random.randint(0, 2)
+
     obs, reward, done = game.pong_step(action)
     return obs, reward, done, action
 
@@ -64,17 +129,18 @@ def play_multible_episodes(
     game: pong.Game,
     n_episodes: int,
     n_max_steps: int,
-    model: keras.Model,
+    model: NeuralNetwork,
     loss_fn: Callable,
     zufaelligkeit: float,
     progress: int,
 ):
     all_rewards = []
     all_grads = []
+    # winkel = 0
     winkel = int(5 + (progress) / 10 * 40)
+    softmax = torch.nn.Softmax(dim=1)
     for episode in range(n_episodes):
         current_rewards = []
-        # current_grads = []
         obs = game.reset(winkel=winkel)
         current_obs = []
         next_obs = []
@@ -94,50 +160,65 @@ def play_multible_episodes(
             # current_grads.append(grads)
             if done:
                 break
-        all_rewards.append(current_rewards)
-        # all_grads.append(current_grads)
+        indices = np.random.randint(len(current_obs), size=batch_size)
 
-        # all_final_rewards = discount_rewards(current_rewards, discount_factor)
-        # all_mean_grads = []
-        # for var_index in range(len(model.trainable_variables)):
-        #     mean_grads = tf.reduce_mean(
-        #         [
-        #             final_reward * current_grads[step][var_index]
-        #             for step, final_reward in enumerate(all_final_rewards)
-        #         ],
-        #         axis=0,
-        #     )
-        #     all_mean_grads.append(mean_grads)
+        with torch.no_grad():
+            targets = np.sum(current_rewards) / 1000 + discount_factor * (
+                np.amax(
+                    model(
+                        torch.from_numpy(np.array(next_obs, dtype=np.float32)).to(
+                            device=device,
+                        )
+                    )
+                    .to(torch.device("cpu"))
+                    .numpy()
+                )
+            )
 
-        targets = reward + discount_factor * (
-            np.amax(model.predict(np.array(next_obs)))
-        )
-
-        target_vector = model.predict(np.array(current_obs))
+            target_vector: np.ndarray = (
+                softmax(
+                    model(
+                        torch.from_numpy(np.array(current_obs, dtype=np.float32)).to(
+                            device=device,
+                        )
+                    )
+                )
+                .to(torch.device("cpu"))
+                .numpy()
+            )
+        model.train()
         indexes = np.array([i for i in range(target_vector.shape[0])])
         actions = np.array(current_actions)
         target_vector[[indexes], [actions]] = targets
-        model.fit(np.array(current_obs), target_vector, epochs=1, verbose=0)
+        loss = train_one_epoch(
+            model=model,
+            inputs=torch.from_numpy(np.array(current_obs, dtype=np.float32)).to(
+                device=device
+            ),
+            labels=torch.from_numpy(target_vector.astype(dtype=np.float32)).to(
+                device=device
+            ),
+            loss_fn=loss_fn,
+        )
+        model.eval()
+        # model.fit(np.array(current_obs), target_vector, epochs=1, verbose=0)
 
         # optimizer.apply_gradients(zip(all_mean_grads, model.trainable_variables))
         print(
-            game.ball_y,
-            game.schlaeger_y,
-            zufaelligkeit,
-            reward,
-            # sum(all_final_rewards),
-            progress,
+            f"rand {zufaelligkeit:3.0%}, reward={np.sum(current_rewards):10.3f}, progress={progress:3}, loss={loss:20.4f}"
         )
         history.append(
             (
-                game.ball_y,
-                game.schlaeger_y,
                 zufaelligkeit,
-                reward,
-                # sum(all_final_rewards),
+                np.sum(current_rewards),
+                progress,
+                loss,
             )
         )
-    return all_rewards, all_grads
+
+    pd.DataFrame.from_records(
+        history, columns=["random", "reward", "progress", "loss"]
+    ).to_csv("history.csv")
 
 
 def discount_rewards(rewards: list, discount_factor: float):
@@ -166,7 +247,7 @@ if __name__ == "__main__":
     for rounds in range(progress):
         for interation in range(n_iterrations):
             zufaelligkeit = 0.5 * (n_iterrations - interation) / n_iterrations
-            all_rewards, all_grads = play_multible_episodes(
+            play_multible_episodes(
                 game,
                 n_episodes_per_update,
                 n_max_steps,
@@ -175,20 +256,5 @@ if __name__ == "__main__":
                 zufaelligkeit,
                 rounds,
             )
-            # all_final_rewards = discount_and_normalize_rewards(all_rewards, discount_factor)
-            # all_mean_grads = []
-            # for var_index in range(len(model.trainable_variables)):
-            #     mean_grads = tf.reduce_mean(
-            #         [
-            #             final_reward * all_grads[episode_index][step][var_index]
-            #             for episode_index, final_rewards in enumerate(all_final_rewards)
-            #             for step, final_reward in enumerate(final_rewards)
-            #         ],
-            #         axis=0,
-            #     )
-            #     all_mean_grads.append(mean_grads)
-            # optimizer.apply_gradients(zip(all_mean_grads, model.trainable_variables))
-        # pd.DataFrame.from_records(
-        #     history, columns=[("ball_y", "schlaeger_y", "zufaelligkeit", "reward")]
-        # ).to_csv("history.csv")
+
     game.self.quit_grafik()

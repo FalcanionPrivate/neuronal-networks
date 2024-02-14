@@ -14,9 +14,9 @@ BILDSCHIRM_Y = 200
 
 SCHLAEGER_LAENGE = 25
 SCHLAEGER_GESCHWINDIGKEIT = 1
-BEWEGUNG_PUNKTE = -1
-TREFFER_PUNKTE = 10
-VERLOREN_PUNKTE = -100
+BEWEGUNG_PUNKTE = -0.1
+TREFFER_PUNKTE = 1000
+VERLOREN_PUNKTE = -1000
 GEWONNEN_PUNKTE = 100
 
 
@@ -40,7 +40,7 @@ class Game:
             self.grafik = mit_grafik
             self.surface = pygame.display.get_surface()
 
-    def reset(self, winkel: int = 10) -> np.ndarray:
+    def reset(self, winkel: int = 0) -> np.ndarray:
         """Setzt die Spielumgebung zurück.
 
 
@@ -53,7 +53,7 @@ class Game:
 
         self.quit = False
         self.treffer = 0
-        self.schlaeger_y = BILDSCHIRM_Y / 2
+        self.schlaeger_y = BILDSCHIRM_Y / 2 + SCHLAEGER_LAENGE
         self.ball_x = 1
         self.ball_y = 100
         self.ball_geschwindigkeit = 5
@@ -102,7 +102,10 @@ class Game:
             self.ball_richtung = (2 * pi) - self.ball_richtung
             self.ball_y = -self.ball_y
         if self.ball_x >= BILDSCHIRM_X:
-            belohnung -= abs(self.schlaeger_y + SCHLAEGER_LAENGE / 2 - self.ball_y)
+            belohnung += (
+                BILDSCHIRM_Y
+                - abs(self.schlaeger_y + SCHLAEGER_LAENGE / 2 - self.ball_y)
+            ) / 4
             if (
                 self.ball_y >= self.schlaeger_y
                 and self.ball_y <= self.schlaeger_y + SCHLAEGER_LAENGE
@@ -112,7 +115,7 @@ class Game:
                 belohnung += TREFFER_PUNKTE
                 self.treffer += 1
                 if self.treffer >= self.spiellaenge:
-                    belohnung += GEWONNEN_PUNKTE
+                    # belohnung += GEWONNEN_PUNKTE
                     self.quit = True
                 if learning_mode:
                     self.quit = True
