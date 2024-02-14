@@ -1,11 +1,12 @@
-import pygame
-from math import sin, cos, pi
-from time import sleep
-import numpy as np
-from typing import Tuple
-from enum import Enum
-import random
 import os
+import random
+from enum import Enum
+from math import cos, pi, sin
+from time import sleep
+from typing import Tuple
+
+import numpy as np
+import pygame
 
 os.environ["SDL_VIDEO_WINDOW_POS"] = "%d,%d" % (1500, 450)
 BILDSCHIRM_X = 320
@@ -56,7 +57,7 @@ class Game:
         self.schlaeger_y = BILDSCHIRM_Y / 2 + SCHLAEGER_LAENGE
         self.ball_x = 1
         self.ball_y = 100
-        self.ball_geschwindigkeit = 5
+        self.ball_geschwindigkeit = 1
         self.ball_richtung = random.randint(-winkel, winkel) / 180 * pi
 
         return np.array(
@@ -91,7 +92,10 @@ class Game:
                 belohnung += BEWEGUNG_PUNKTE
         self.ball_x = self.ball_x + self.ball_geschwindigkeit * cos(self.ball_richtung)
         self.ball_y = self.ball_y + self.ball_geschwindigkeit * sin(self.ball_richtung)
-
+        belohnung += (
+            BILDSCHIRM_Y / 2
+            - abs(self.schlaeger_y + (SCHLAEGER_LAENGE / 2) - self.ball_y)
+        ) / 40
         if self.ball_x <= 0:
             self.ball_richtung = ((2 * pi - self.ball_richtung) + pi) % (2 * pi)
             self.ball_x = -self.ball_x
@@ -102,10 +106,7 @@ class Game:
             self.ball_richtung = (2 * pi) - self.ball_richtung
             self.ball_y = -self.ball_y
         if self.ball_x >= BILDSCHIRM_X:
-            belohnung += (
-                BILDSCHIRM_Y
-                - abs(self.schlaeger_y + SCHLAEGER_LAENGE / 2 - self.ball_y)
-            ) / 4
+
             if (
                 self.ball_y >= self.schlaeger_y
                 and self.ball_y <= self.schlaeger_y + SCHLAEGER_LAENGE
@@ -150,10 +151,10 @@ class Game:
             np.array(
                 [
                     self.schlaeger_y,
-                    self.ball_x,
+                    # self.ball_x,
                     self.ball_y,
-                    self.ball_geschwindigkeit,
-                    self.ball_richtung,
+                    # self.ball_geschwindigkeit,
+                    # self.ball_richtung,
                 ]
             ),
             belohnung,

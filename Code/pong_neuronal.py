@@ -1,15 +1,16 @@
-import pong
+import random
+from collections import deque
+from math import tan
+from typing import Callable
 
 import numpy as np
-from typing import Callable
-import random
 import pandas as pd
-from math import tan
+import pong
 import torch
 from torch import nn
-from collections import deque
 
-n_inputs = 5  # == env.observation_space.shape[0]
+n_inputs = 2  # 5  # == env.observation_space.shape[0]
+n_actions = 3
 
 device = (
     "cuda"
@@ -19,34 +20,13 @@ device = (
 print(f"Using {device} device")
 
 
-# model = Sequential(
-#     [
-#         keras.layers.Dense(30, activation="sigmoid", input_shape=[n_inputs]),
-#         keras.layers.Dense(30, activation="relu"),
-#         keras.layers.Dense(30, activation="relu"),
-#         # keras.layers.Dense(10, activation="relu"),
-#         # evtl mehr versteckte Schichten
-#         keras.layers.Dense(
-#             3,
-#             activation="softmax",  # bei mehr als einem Output Softmax-Aktivierungsfunktion
-#         ),
-#     ]
-# )
-
-
 class NeuralNetwork(nn.Module):
     def __init__(self):
         super().__init__()
         self.linear_relu_stack = nn.Sequential(
-            nn.Linear(n_inputs, 512),
+            nn.Linear(n_inputs, 32),
             nn.Sigmoid(),
-            nn.Linear(512, 512),
-            nn.Tanh(),
-            nn.Linear(512, 256),
-            nn.Softmax(),
-            nn.Linear(256, 128),
-            nn.Softmax(),
-            nn.Linear(128, 3),
+            nn.Linear(32, n_actions),
         )
 
     def forward(self, x):
@@ -61,10 +41,10 @@ n_episodes_per_update = 100
 n_max_steps = 200
 discount_factor = 0.99
 # optimizer = keras.optimizers.Adam()
-optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 # loss_fn = keras.losses.CategoricalCrossentropy(from_logits=True)
-loss_fn = torch.nn.HuberLoss()
-batch_size = 32
+loss_fn = torch.nn.MSELoss()
+batch_size = 64
 
 
 history = []
@@ -77,10 +57,7 @@ progress = 10
 
 
 def train_one_epoch(
-    model: NeuralNetwork,
-    inputs: torch.Tensor,
-    labels: torch.Tensor,
-    loss_fn: torch.nn.HuberLoss,
+    model: NeuralNetwork, inputs: torch.Tensor, labels: torch.Tensor, loss_fn
 ):
 
     # Zero your gradients for every batch!
@@ -110,7 +87,7 @@ def play_one_step(
 
     if random.random() > zufaelligkeit:
         probabilities: torch.Tensor = model(
-            torch.from_numpy(np.reshape(obs.astype(np.float32), (1, 5))).to(
+            torch.from_numpy(np.reshape(obs.astype(np.float32), (1, n_inputs))).to(
                 device=device
             )
         )
@@ -163,16 +140,20 @@ def play_multible_episodes(
             # current_grads.append(grads)
             if done:
                 break
+        # trainier auf einem subset der schritte
         indices = np.random.randint(len(current_obs), size=batch_size)
-        batch_next_obs = next_obs[indices]
-        batch_current_obs = current_obs[indices]
-        batch_rewards = current_rewards[indices]
-        batch_actions = current_actions[indexes]
-        for index in indices:
-            replay_buffer.append()
+        batch_next_obs = []
+        batch_current_obs = []
+        batch_rewards = []
+        batch_actions = []
+        for i in indices:
+            batch_next_obs.append(next_obs[i])
+            batch_current_obs.append(current_obs[i])
+            batch_rewards.append(current_rewards[i])
+            batch_actions.append(current_actions[i])
 
         with torch.no_grad():
-            target_Q_values = batch_rewards / 1000 + discount_factor * (
+            target_Q_values = np.array(batch_rewards) / 50 + discount_factor * (
                 np.amax(
                     model(
                         torch.from_numpy(np.array(batch_next_obs, dtype=np.float32)).to(
@@ -188,7 +169,9 @@ def play_multible_episodes(
             target_vector: np.ndarray = (
                 softmax(
                     model(
-                        torch.from_numpy(np.array(current_obs, dtype=np.float32)).to(
+                        torch.from_numpy(
+                            np.array(batch_current_obs, dtype=np.float32)
+                        ).to(
                             device=device,
                         )
                     )
@@ -197,12 +180,12 @@ def play_multible_episodes(
                 .numpy()
             )
         model.train()
-        indexes = np.array([i for i in range(target_vector.shape[0])])
-        actions = np.array(current_actions)
-        target_vector[[indexes], [actions]] = target_Q_values
+
+        actions = np.array(batch_actions)
+        target_vector[[i for i in range(batch_size)], [actions]] = target_Q_values
         loss = train_one_epoch(
             model=model,
-            inputs=torch.from_numpy(np.array(current_obs, dtype=np.float32)).to(
+            inputs=torch.from_numpy(np.array(batch_current_obs, dtype=np.float32)).to(
                 device=device
             ),
             labels=torch.from_numpy(target_vector.astype(dtype=np.float32)).to(
