@@ -41,7 +41,7 @@ n_episodes_per_update = 100
 n_max_steps = 200
 discount_factor = 0.99
 # optimizer = keras.optimizers.Adam()
-optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
 # loss_fn = keras.losses.CategoricalCrossentropy(from_logits=True)
 loss_fn = torch.nn.MSELoss()
 batch_size = 64

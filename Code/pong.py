@@ -63,10 +63,10 @@ class Game:
         return np.array(
             [
                 self.schlaeger_y,
-                self.ball_x,
+                # self.ball_x,
                 self.ball_y,
-                self.ball_geschwindigkeit,
-                self.ball_richtung,
+                # self.ball_geschwindigkeit,
+                # self.ball_richtung,
             ]
         )
 
