@@ -17,7 +17,7 @@ SCHLAEGER_LAENGE = 25
 SCHLAEGER_GESCHWINDIGKEIT = 1
 BEWEGUNG_PUNKTE = -0.1
 TREFFER_PUNKTE = 1000
-VERLOREN_PUNKTE = -1000
+VERLOREN_PUNKTE = -1000 //TODO:
 GEWONNEN_PUNKTE = 100
 
 
@@ -92,10 +92,9 @@ class Game:
                 belohnung += BEWEGUNG_PUNKTE
         self.ball_x = self.ball_x + self.ball_geschwindigkeit * cos(self.ball_richtung)
         self.ball_y = self.ball_y + self.ball_geschwindigkeit * sin(self.ball_richtung)
-        belohnung += (
-            BILDSCHIRM_Y / 2
-            - abs(self.schlaeger_y + (SCHLAEGER_LAENGE / 2) - self.ball_y)
-        ) / 40
+        belohnung -= (
+            abs(self.schlaeger_y - self.ball_y)
+        ) / 80 //TODO:
         if self.ball_x <= 0:
             self.ball_richtung = ((2 * pi - self.ball_richtung) + pi) % (2 * pi)
             self.ball_x = -self.ball_x
@@ -150,9 +149,9 @@ class Game:
         return (
             np.array(
                 [
-                    self.schlaeger_y,
+                    self.schlaeger_y / BILDSCHIRM_Y,
                     # self.ball_x,
-                    self.ball_y,
+                    self.ball_y / BILDSCHIRM_Y,
                     # self.ball_geschwindigkeit,
                     # self.ball_richtung,
                 ]
